@@ -533,6 +533,53 @@ begin
     exact mul_mem_mul (mem_span_singleton.mpr ⟨1, one_smul _ _⟩) hy' }
 end
 
+lemma invertible_of_principal (I : fractional_ideal g)
+  [submodule.is_principal I.1] (h : I ≠ 0) :
+  I * I⁻¹ = 1 :=
+begin
+  refine mul_inv_cancel_iff.mpr ⟨span_singleton (generator I.1)⁻¹, _⟩,
+  -- Rewrite only the `I` that appears alone.
+  conv_lhs { congr, rw eq_span_singleton_of_principal I },
+  rw [span_singleton_mul_span_singleton, mul_inv_cancel, span_singleton_one],
+  intro generator_I_eq_zero,
+  apply h,
+  rw [eq_span_singleton_of_principal I, generator_I_eq_zero, span_singleton_zero]
+end
+
+lemma exists_eq_span_singleton_mul (I : fractional_ideal g) :
+  ∃ (a : K) (aI : ideal R), I = span_singleton a * aI :=
+begin
+  obtain ⟨a_inv, nonzero, ha⟩ := I.2,
+  have map_a_nonzero := mt g.to_map_eq_zero_iff.mpr nonzero,
+  use (g.to_map a_inv)⁻¹,
+  use (span_singleton (g.to_map a_inv) * I).1.comap g.lin_coe,
+  ext,
+  refine iff.trans _ mem_singleton_mul.symm,
+  split,
+  { intro hx,
+    obtain ⟨x', hx'⟩ := ha x hx,
+    refine ⟨g.to_map x', mem_coe.mpr ⟨x', (mem_singleton_mul.mpr ⟨x, hx, hx'⟩), rfl⟩, _⟩,
+    erw [hx', ←mul_assoc, inv_mul_cancel map_a_nonzero, one_mul] },
+  { rintros ⟨y, hy, rfl⟩,
+    obtain ⟨x', hx', rfl⟩ := mem_coe.mp hy,
+    obtain ⟨y', hy', hx'⟩ := mem_singleton_mul.mp hx',
+    rw lin_coe_apply at hx',
+    erw [hx', ←mul_assoc, inv_mul_cancel map_a_nonzero, one_mul],
+    exact hy' }
+end
+
+instance is_principal {R} [principal_ideal_domain R] {g : fraction_map R K}
+  (I : fractional_ideal g) : I.val.is_principal :=
+⟨ begin
+  obtain ⟨a, aI, ha⟩ := exists_eq_span_singleton_mul I,
+  have := a * g.to_map (generator aI),
+  use a * g.to_map (generator aI),
+  suffices : I = span_singleton (a * g.to_map (generator aI)),
+  { exact congr_arg subtype.val this },
+  conv_lhs { rw [ha, ←span_singleton_generator aI] },
+  rw [coe_span_singleton (generator aI), span_singleton_mul_span_singleton]
+end ⟩
+
 end principal_ideal_domain
 
 end fractional_ideal
