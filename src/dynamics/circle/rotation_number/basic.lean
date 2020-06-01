@@ -3,6 +3,7 @@ import tactic.find
 import tactic.fin_cases
 import analysis.specific_limits
 import order.fixed_points
+import algebra.iterate_hom
 
 open category_theory (End) filter set
 open_locale topological_space classical
