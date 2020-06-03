@@ -19,7 +19,7 @@ So, we restate standard `*_hom.map_*` lemmas under names `*_hom.iterate_map_*`.
 
 We also prove formulas for iterates of add/mul left/right.
 
-## TODO
+## Tags
 
 homomorphism, iterate
 -/
