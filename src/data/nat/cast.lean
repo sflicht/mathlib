@@ -73,7 +73,8 @@ def cast_add_monoid_hom (α : Type*) [add_monoid α] [has_one α] : ℕ →+ α 
   map_add' := cast_add,
   map_zero' := cast_zero }
 
-lemma coe_cast_add_monoid_hom [add_monoid α] [has_one α] : (cast_add_monoid_hom α : ℕ → α) = coe := rfl
+@[simp] lemma coe_cast_add_monoid_hom [add_monoid α] [has_one α] :
+  (cast_add_monoid_hom α : ℕ → α) = coe := rfl
 
 @[simp, norm_cast] theorem cast_bit0 [add_monoid α] [has_one α] (n : ℕ) : ((bit0 n : ℕ) : α) = bit0 n := cast_add _ _
 
@@ -153,10 +154,19 @@ end linear_ordered_field
 
 end nat
 
+@[ext] lemma add_monoid_hom.nat_ext {A} [add_monoid A] ⦃f g : ℕ →+ A⦄ (h1 : f 1 = g 1) :
+  f = g :=
+begin
+  ext n,
+  induction n with n ihn,
+  { simp },
+  { simp [*, nat.succ_eq_add_one] }
+end
+
 lemma add_monoid_hom.eq_nat_cast {A} [add_monoid A] [has_one A] (f : ℕ →+ A) (h1 : f 1 = 1) :
-  ∀ n : ℕ, f n = n
-| 0 := by simp only [nat.cast_zero, f.map_zero]
-| (n+1) := by simp only [nat.cast_succ, f.map_add, add_monoid_hom.eq_nat_cast n, h1]
+  ∀ n : ℕ, f n = n :=
+show ∀ n, f n = nat.cast_add_monoid_hom _ n,
+from add_monoid_hom.ext_iff.1 $ add_monoid_hom.nat_ext $ by simp [h1]
 
 @[simp] lemma ring_hom.eq_nat_cast {R} [semiring R] (f : ℕ →+* R) (n : ℕ) : f n = n :=
 f.to_add_monoid_hom.eq_nat_cast f.map_one n

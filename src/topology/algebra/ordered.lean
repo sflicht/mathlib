@@ -100,7 +100,7 @@ set of points `(x, y)` with `x ≤ y` is closed in the product space. We introdu
 This property is satisfied for the order topology on a linear order, but it can be satisfied more
 generally, and suffices to derive many interesting properties relating order and topology. -/
 class order_closed_topology (α : Type*) [topological_space α] [preorder α] : Prop :=
-(is_closed_le' : is_closed (λp:α×α, p.1 ≤ p.2))
+(is_closed_le' : is_closed { p:α×α | p.1 ≤ p.2})
 
 instance : Π [topological_space α], topological_space (order_dual α) := id
 
@@ -178,11 +178,13 @@ begin
   show (f x, g x) ∈ {p : α × α | p.1 ≤ p.2},
   suffices : (f x, g x) ∈ closure {p : α × α | p.1 ≤ p.2},
     begin
-      rwa closure_eq_iff_is_closed.2 at this,
+      rwa closure_eq_of_is_closed at this,
       exact order_closed_topology.is_closed_le'
     end,
   exact (continuous_within_at.prod hf hg).mem_closure hx h
 end
+
+lemma is_closed.is_closed_le [topological_space β] {f g : β → α} {s : set β} 
 
 end preorder
 
@@ -233,6 +235,16 @@ interior_eq_of_open is_open_Iio
 
 @[simp] lemma interior_Ioo : interior (Ioo a b) = Ioo a b :=
 interior_eq_of_open is_open_Ioo
+
+lemma is_preconnected.intermediate_value₂ {γ : Type*} [topological_space γ] {s : set γ}
+  (hs : is_preconnected s) {a b : γ} (ha : a ∈ s) (hb : b ∈ s) {f g : γ → α}
+  (hf : continuous_on f s) (hg : continuous_on g s) (ha : f a ≤ g a) (hb : g b ≤ f b) :
+  ∃ x ∈ s, f x = g x :=
+begin
+  obtain ⟨x, hx, hx'⟩ : (s ∩ {x | f x ≤ g x ∧ g x ≤ f x}).nonempty,
+    from is_preconnected_closed_iff.1 hs _ _,
+  
+end
 
 lemma is_preconnected.forall_Icc_subset {s : set α} (hs : is_preconnected s)
   {a b : α} (ha : a ∈ s) (hb : b ∈ s) :

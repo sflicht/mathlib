@@ -2,11 +2,34 @@ import tactic.monotonicity
 import tactic.find
 import tactic.fin_cases
 import analysis.specific_limits
-import order.fixed_points
+import dynamics.fixed_points
+import order.iterate
 import algebra.iterate_hom
 
 open category_theory (End) filter set
 open_locale topological_space classical
+
+-- TODO: move to a new `algebra.conj`
+def {u} units.conj_hom (M : Type u) [monoid M] : units M →* mul_aut M :=
+{ to_fun := λ u,
+  { to_fun := λ x, ↑u * x * ↑(u⁻¹),
+    inv_fun := λ x, ↑(u⁻¹) * x * u,
+    left_inv := λ x, by simp  [mul_assoc],
+    right_inv := λ x, by simp [mul_assoc],
+    map_mul' := λ x y, by simp [mul_assoc] },
+  map_one' := by { ext, simp },
+  map_mul' := λ u₁ u₂, by { ext x, simp [mul_assoc] } }
+
+-- TODO: add `mul_equiv.map_pow` to `group_power`
+-- TODO: move to `group_power`
+@[simp] lemma units.conj_pow {M : Type*} [monoid M] (u : units M) (x : M) (n : ℕ) :
+  (u * x * ↑(u⁻¹) : M)^n = u * x^n * ↑(u⁻¹) :=
+((units.conj_hom M u).to_monoid_hom.map_pow x n).symm
+
+-- TODO: move to `group_power`
+@[simp] lemma units.conj_pow' {M : Type*} [monoid M] (u : units M) (x : M) (n : ℕ) :
+  (↑(u⁻¹) * x * u : M)^n = ↑(u⁻¹) * x^n * u :=
+(u⁻¹).conj_pow x n
 
 /-!
 ### Definition and monoid structure
@@ -18,9 +41,11 @@ structure circle_deg1_lift : Type :=
 (monotone' : monotone to_fun)
 (map_add_one' : ∀ x, to_fun (x + 1) = to_fun x + 1)
 
+namespace circle_deg1_lift
+
 instance : has_coe_to_fun circle_deg1_lift := ⟨λ _, ℝ → ℝ, circle_deg1_lift.to_fun⟩
 
-namespace circle_deg1_lift
+@[simp] lemma coe_mk (f h₁ h₂) : ⇑(mk f h₁ h₂) = f := rfl
 
 variables (f g : circle_deg1_lift)
 
@@ -57,40 +82,85 @@ lemma mul_apply (x) : (f * g) x = f (g x) := rfl
 
 @[simp] lemma coe_one : ⇑(1 : circle_deg1_lift) = id := rfl
 
+instance units_has_coe_to_fun : has_coe_to_fun (units circle_deg1_lift) :=
+⟨λ _, ℝ → ℝ, λ f, ⇑(f : circle_deg1_lift)⟩
+
+@[simp, norm_cast] lemma units_coe (f : units circle_deg1_lift) : ⇑(f : circle_deg1_lift) = f := rfl
+
+lemma coe_pow : ∀ n : ℕ, ⇑(f^n) = (f^[n])
+| 0 := rfl
+| (n+1) := by {ext x, simp [coe_pow n, pow_succ'] }
+
+lemma semiconj_by_iff_semiconj {f g₁ g₂ : circle_deg1_lift} :
+  semiconj_by f g₁ g₂ ↔ function.semiconj f g₁ g₂ :=
+ext_iff
+
+lemma commute_iff_commute {f g : circle_deg1_lift} :
+  commute f g ↔ function.commute f g :=
+ext_iff
+
 /-!
-### Commutativity with integer translations
+### Translate by a constant
 -/
 
 def translate : multiplicative ℝ →* units circle_deg1_lift :=
 by refine (units.map _).comp (to_units $ multiplicative ℝ).to_monoid_hom; exact
 { to_fun := λ x, ⟨λ y, x.to_add + y, λ y₁ y₂ h, add_le_add_left h _, λ y, (add_assoc _ _ _).symm⟩,
   map_one' := ext $ zero_add,
-  map_mul' := λ x y, ext $ λ z, add_assoc _ _ _ }
+  map_mul' := λ x y, ext $ add_assoc _ _ }
 
 @[simp] lemma translate_apply (x y : ℝ) : translate (multiplicative.of_add x) y = x + y := rfl
 
 @[simp]
 lemma translate_inv_apply (x y : ℝ) : (translate $ multiplicative.of_add x)⁻¹ y = -x + y := rfl
 
-lemma commute_translate_one : commute f (translate $ multiplicative.of_add 1) :=
-ext f.map_one_add
+@[simp] lemma translate_gpow (x : ℝ) (n : ℤ) :
+  (translate (multiplicative.of_add x))^n = translate (multiplicative.of_add $ n * x) :=
+by simp only [← gsmul_eq_mul, of_add_gsmul, monoid_hom.map_gpow]
 
-lemma commute_translate_int (m : ℤ) : commute f (translate $ multiplicative.of_add m) :=
-by { rw [← gsmul_one, of_add_gsmul, translate.map_gpow],
-  exact f.commute_translate_one.units_gpow_right _ }
+@[simp] lemma translate_pow (x : ℝ) (n : ℕ) :
+  (translate (multiplicative.of_add x))^n = translate (multiplicative.of_add $ n * x) :=
+translate_gpow x n
 
-lemma coe_pow : ∀ n : ℕ, ⇑(f^n) = (f^[n])
-| 0 := rfl
-| (n+1) := by {ext x, simp [coe_pow n, pow_succ'] }
+@[simp] lemma translate_iterate (x : ℝ) (n : ℕ) :
+  (translate (multiplicative.of_add x))^[n] = translate (multiplicative.of_add $ n * x) :=
+by rw [← units_coe, ← coe_pow, ← units.coe_pow, translate_pow, units_coe]
+
+/-!
+### Commutativity with integer translations
+
+In this section we prove that `f` commutes with translation by an integer number. First we formulate
+these statements (for a natural or an integer number, addition on the left or on the right, addition
+or subtraction) using `function.commute`, then reformulate as `simp` lemmas `map_int_add` etc.
+-/
+
+lemma commute_nat_add (n : ℕ) : function.commute f ((+) n) :=
+by simpa only [nsmul_one, add_left_iterate] using function.commute.iterate_right f.map_one_add n
+
+lemma commute_add_nat (n : ℕ) : function.commute f (λ x, x + n) :=
+by simp only [add_comm _ (n:ℝ), f.commute_nat_add n]
+
+lemma commute_sub_nat (n : ℕ) : function.commute f (λ x, x - n) :=
+(f.commute_add_nat n).inverses_right (equiv.add_right _).right_inv (equiv.add_right _).left_inv
+
+lemma commute_add_int : ∀ n : ℤ, function.commute f (λ x, x + n)
+| (n:ℕ) := f.commute_add_nat n
+| -[1+n] := f.commute_sub_nat (n + 1)
+
+lemma commute_int_add (n : ℤ) : function.commute f ((+) n) :=
+by simpa only [add_comm _ (n:ℝ)] using f.commute_add_int n
+
+lemma commute_sub_int (n : ℤ) : function.commute f (λ x, x - n) :=
+(f.commute_add_int n).inverses_right (equiv.add_right _).right_inv (equiv.add_right _).left_inv
 
 @[simp] lemma map_int_add (m : ℤ) (x : ℝ) : f (m + x) = m + f x :=
-ext_iff.1 (f.commute_translate_int m) x
+f.commute_int_add m x
 
 @[simp] lemma map_add_int (x : ℝ) (m : ℤ) : f (x + m) = f x + m :=
-by simpa only [add_comm] using f.map_int_add m x
+f.commute_add_int m x
 
 @[simp] lemma map_sub_int (x : ℝ) (n : ℤ) : f (x - n) = f x - n :=
-by simpa only [int.cast_neg] using f.map_add_int x (-n)
+f.commute_sub_int n x
 
 @[simp] lemma map_add_nat (x : ℝ) (n : ℕ) : f (x + n) = f x + n :=
 f.map_add_int x n
@@ -101,17 +171,61 @@ f.map_int_add n x
 @[simp] lemma map_sub_nat (x : ℝ) (n : ℕ) : f (x - n) = f x - n :=
 f.map_sub_int x n
 
-instance units_coe_fn : has_coe_to_fun (units circle_deg1_lift) :=
-⟨λ _, ℝ → ℝ, λ u, u⟩
-
-@[simp, norm_cast] lemma units_coe_coe (f : units circle_deg1_lift) :
-  ((f : circle_deg1_lift) : End ℝ) = f := rfl
-
 lemma map_int_of_map_zero (n : ℤ) : f n = f 0 + n :=
 by rw [← f.map_add_int, zero_add]
 
+@[simp] lemma map_fract_sub_fract_eq (x : ℝ) :
+  f (fract x) - fract x = f x - x :=
+by conv_rhs { rw [← fract_add_floor x, f.map_add_int, add_sub_comm, sub_self, add_zero] }
+
+/-!
+### Pointwise order on circle maps
+-/
+
+/-- Circle maps form a lattice with respect to the pointwise -/
+noncomputable instance : lattice circle_deg1_lift :=
+{ sup := λ f g,
+  { to_fun := λ x, max (f x) (g x),
+    monotone' := λ x y h, max_le_max (f.mono h) (g.mono h), -- TODO: generalize to `monotone.max`
+    map_add_one' := λ x, by simp [max_add_add_right] },
+  le := λ f g, ∀ x, f x ≤ g x,
+  le_refl := λ f x, le_refl (f x),
+  le_trans := λ f₁ f₂ f₃ h₁₂ h₂₃ x, le_trans (h₁₂ x) (h₂₃ x),
+  le_antisymm := λ f₁ f₂ h₁₂ h₂₁, ext $ λ x, le_antisymm (h₁₂ x) (h₂₁ x),
+  le_sup_left := λ f g x, le_max_left (f x) (g x),
+  le_sup_right := λ f g x, le_max_right (f x) (g x),
+  sup_le := λ f₁ f₂ f₃ h₁ h₂ x, max_le (h₁ x) (h₂ x),
+  inf := λ f g,
+  { to_fun := λ x, min (f x) (g x),
+    monotone' := λ x y h, min_le_min (f.mono h) (g.mono h),
+    map_add_one' := λ x, by simp [min_add_add_right] },
+  inf_le_left := λ f g x, min_le_left (f x) (g x),
+  inf_le_right := λ f g x, min_le_right (f x) (g x),
+  le_inf := λ f₁ f₂ f₃ h₂ h₃ x, le_min (h₂ x) (h₃ x) }
+
+@[simp] lemma sup_apply (x : ℝ) : (f ⊔ g) x = max (f x) (g x) := rfl
+
+@[simp] lemma inf_apply (x : ℝ) : (f ⊓ g) x = min (f x) (g x) := rfl
+
+lemma iterate_monotone (n : ℕ) : monotone (λ f : circle_deg1_lift, f^[n]) :=
+λ f g h, f.monotone.iterate_le_of_le h _
+
+lemma iterate_mono {f g : circle_deg1_lift} (h : f ≤ g) (n : ℕ) : f^[n] ≤ (g^[n]) :=
+iterate_monotone n h
+
+lemma pow_mono {f g : circle_deg1_lift} (h : f ≤ g) (n : ℕ) : f^n ≤ g^n :=
+λ x, by simp only [coe_pow, iterate_mono h n x]
+
+lemma pow_monotone (n : ℕ) : monotone (λ f : circle_deg1_lift, f^n) :=
+λ f g h, pow_mono h n
+
 /-!
 ### Estimates on `(f * g) 0`
+
+We prove the estimates `f 0 + ⌊g 0⌋ ≤ f (g 0) ≤ f 0 + ⌈g 0⌉` and some corollaries with added/removed
+floors and ceils.
+
+We also prove that for two semiconjugate maps 
 -/
 
 lemma map_le_of_map_zero (x : ℝ) : f x ≤ f 0 + ⌈x⌉ :=
@@ -129,7 +243,7 @@ calc ⌈f (g 0)⌉ ≤ ⌈f 0 + ⌈g 0⌉⌉ : ceil_mono $ f.map_map_zero_le g
            ... = ⌈f 0⌉ + ⌈g 0⌉ : ceil_add_int _ _
 
 lemma map_map_zero_lt : f (g 0) < f 0 + g 0 + 1 :=
-calc f (g 0) ≤ f 0 + ⌈g 0⌉     : f.map_map_zero_le  g
+calc f (g 0) ≤ f 0 + ⌈g 0⌉     : f.map_map_zero_le g
          ... < f 0 + (g 0 + 1) : add_lt_add_left (ceil_lt_add_one _) _
          ... = f 0 + g 0 + 1   : (add_assoc _ _ _).symm
 
@@ -158,75 +272,70 @@ begin
   exact ⟨f.lt_map_map_zero g, f.map_map_zero_lt g⟩
 end
 
-lemma dist_map_zero_lt_of_semiconj {f g₁ g₂ : circle_deg1_lift} (h : semiconj_by f g₁ g₂) :
+lemma dist_map_zero_lt_of_semiconj {f g₁ g₂ : circle_deg1_lift} (h : function.semiconj f g₁ g₂) :
   dist (g₁ 0) (g₂ 0) < 2 :=
 calc dist (g₁ 0) (g₂ 0) ≤ dist (g₁ 0) (f (g₁ 0) - f 0) + dist _ (g₂ 0) : dist_triangle _ _ _
 ... = dist (f 0 + g₁ 0) (f (g₁ 0)) + dist (g₂ 0 + f 0) (g₂ (f 0)) :
-  by simp only [← mul_apply, h.eq, real.dist_eq, sub_sub, add_comm (f 0), sub_sub_assoc_swap,
-    abs_sub ((g₂ * f) 0)]
+  by simp only [h.eq, real.dist_eq, sub_sub, add_comm (f 0), sub_sub_assoc_swap, abs_sub (g₂ (f 0))]
 ... < 2 : add_lt_add (f.dist_map_map_zero_lt g₁) (g₂.dist_map_map_zero_lt f)
+
+lemma dist_map_zero_lt_of_semiconj_by {f g₁ g₂ : circle_deg1_lift} (h : semiconj_by f g₁ g₂) :
+  dist (g₁ 0) (g₂ 0) < 2 :=
+dist_map_zero_lt_of_semiconj $ semiconj_by_iff_semiconj.1 h
 
 /-!
 ### Estimates on `(f^n) x`
+
+If we know that `f x` is `≤`/`<`/`≥`/`>`/`=` to `x + m`, then we have a similar estimate on
+`f^[n] x` and `x + n * m`.
+
+For `≤`, `≥`, and `=` we formulate both `of` (implication) and `iff` versions because implications
+work for `n = 0`. For `<` and `>` we formulate only `iff` versions.
 -/
 
-lemma map_pow_succ_lt_of_map_lt_add_int {x : ℝ} {m : ℤ} (h : f x < x + m) :
-  ∀ n : ℕ, (f^(n + 1)) x < x + (n + 1) * m
-| 0 := by simpa
-| (n + 1) :=
-calc f ((f^(n+1)) x) ≤ f (x + (n + 1) * m) : f.mono (le_of_lt $ map_pow_succ_lt_of_map_lt_add_int n)
-                 ... = f x + (n + 1) * m   : by simpa using f.map_add_int x ((n + 1) * m)
-                 ... < x + m + (n + 1) * m : add_lt_add_right h _
-                 ... = x + (n + 1 + 1) * m : by simp [add_assoc, add_comm (m:ℝ), add_mul]
+lemma iterate_le_of_map_le_add_int {x : ℝ} {m : ℤ} (h : f x ≤ x + m) (n : ℕ) :
+  f^[n] x ≤ x + n * m :=
+by simpa only [nsmul_eq_mul, add_right_iterate]
+using (f.commute_add_int m).iterate_le_of_map_le f.monotone (monotone_id.add_const m) h n
 
+lemma le_iterate_of_add_int_le_map {x : ℝ} {m : ℤ} (h : x + m ≤ f x) (n : ℕ) :
+  x + n * m ≤ (f^[n]) x :=
+by simpa only [nsmul_eq_mul, add_right_iterate]
+using (f.commute_add_int m).symm.iterate_le_of_map_le (monotone_id.add_const m) f.monotone h n
 
-lemma map_pow_lt_of_map_lt_add_int {x : ℝ} {m : ℤ} (h : f x < x + m) {n : ℕ} (hn : 0 < n) :
-  (f^n) x < x + n * m :=
-by simpa only [nat.succ_pred_eq_of_pos hn, ← nat.succ_eq_add_one, ← nat.cast_succ]
-using f.map_pow_succ_lt_of_map_lt_add_int h n.pred
+lemma iterate_eq_of_map_eq_add_int {x : ℝ} {m : ℤ} (h : f x = x + m) (n : ℕ) :
+  f^[n] x = x + n * m :=
+by simpa only [nsmul_eq_mul, add_right_iterate]
+using (f.commute_add_int m).iterate_eq_of_map_eq n h
 
-lemma lt_map_pow_succ_of_lt_map_add_int {x : ℝ} {m : ℤ} (h : x + m < f x) :
-  ∀ n : ℕ, x + (n + 1) * m < (f^(n + 1)) x
-| 0 := by simpa
-| (n + 1) :=
-calc x + (n+1+1) * m = x + m + (n + 1) * m : by simp [add_assoc, add_comm (m:ℝ), add_mul]
-                 ... < f x + (n + 1) * m   : add_lt_add_right h _
-                 ... = f (x + (n + 1) * m) : by simpa using (f.map_add_int x ((n + 1) * m)).symm
-                 ... ≤ f ((f^(n + 1)) x)   : f.mono (le_of_lt $ lt_map_pow_succ_of_lt_map_add_int n)
+lemma iterate_pos_le_iff {x : ℝ} {m : ℤ} {n : ℕ} (hn : 0 < n) :
+  f^[n] x ≤ x + n * m ↔ f x ≤ x + m :=
+by simpa only [nsmul_eq_mul, add_right_iterate]
+using (f.commute_add_int m).iterate_pos_le_iff_map_le f.monotone (strict_mono_id.add_const m) hn
 
-lemma lt_map_pow_of_lt_map_add_int {x : ℝ} {m : ℤ} (h : x + m < f x) {n : ℕ} (hn : 0 < n) :
-  x + n * m < (f^n) x :=
-by simpa only [nat.succ_pred_eq_of_pos hn, ← nat.succ_eq_add_one, ← nat.cast_succ]
-using f.lt_map_pow_succ_of_lt_map_add_int h n.pred
+lemma iterate_pos_lt_iff {x : ℝ} {m : ℤ} {n : ℕ} (hn : 0 < n) :
+  f^[n] x < x + n * m ↔ f x < x + m :=
+by simpa only [nsmul_eq_mul, add_right_iterate]
+using (f.commute_add_int m).iterate_pos_lt_iff_map_lt f.monotone (strict_mono_id.add_const m) hn
 
-lemma map_pow_le_of_map_le_add_int {x : ℝ} {m : ℤ} (h : f x ≤ x + m) :
-  ∀ n : ℕ, (f^n) x ≤ x + n * m
-| 0 := by simp
-| (n + 1) :=
-calc f ((f^n) x) ≤ f (x + n * m)   : f.mono (map_pow_le_of_map_le_add_int n)
-             ... = f x + n * m     : by simpa using f.map_add_int x (n * m)
-             ... ≤ x + m + n * m   : add_le_add_right h _
-             ... = x + (n + 1) * m : by simp [add_assoc, add_comm (m:ℝ), add_mul]
+lemma iterate_pos_eq_iff {x : ℝ} {m : ℤ} {n : ℕ} (hn : 0 < n) :
+  f^[n] x = x + n * m ↔ f x = x + m :=
+by simpa only [nsmul_eq_mul, add_right_iterate]
+using (f.commute_add_int m).iterate_pos_eq_iff_map_eq f.monotone (strict_mono_id.add_const m) hn
 
-lemma le_map_pow_of_le_map_add_int {x : ℝ} {m : ℤ} (h : x + m ≤ f x) :
-  ∀ n : ℕ, x + n * m ≤ (f^n) x
-| 0 := by simp
-| (n + 1) :=
-calc x + (n + 1) * m = x + m + n * m : by simp [add_assoc, add_comm (m:ℝ), add_mul]
-                 ... ≤ f x + n * m   : add_le_add_right h _
-                 ... = f (x + n * m) : by simpa using (f.map_add_int x (n * m)).symm
-                 ... ≤ f ((f^n) x)   : f.mono (le_map_pow_of_le_map_add_int n)
+lemma le_iterate_pos_iff {x : ℝ} {m : ℤ} {n : ℕ} (hn : 0 < n) :
+  x + n * m ≤ (f^[n]) x ↔ x + m ≤ f x :=
+by simpa only [not_lt] using not_congr (f.iterate_pos_lt_iff hn)
 
-lemma map_pow_eq_of_map_eq_add_int {x : ℝ} {m : ℤ} (h : f x = x + m) (n : ℕ) :
-  (f^n) x = x + n * m :=
-le_antisymm (f.map_pow_le_of_map_le_add_int (le_of_eq h) n)
-  (f.le_map_pow_of_le_map_add_int (le_of_eq h.symm) n)
+lemma lt_iterate_pos_iff {x : ℝ} {m : ℤ} {n : ℕ} (hn : 0 < n) :
+  x + n * m < (f^[n]) x ↔ x + m < f x :=
+by simpa only [not_le] using not_congr (f.iterate_pos_le_iff hn)
 
-lemma cmp_map_pow_succ_add_mul_eq {x : ℝ} {m : ℤ} (n : ℕ) :
-  cmp ((f^(n+1)) x) (x + (n+1) * m) = cmp (f x) (x + m) :=
+lemma mul_floor_map_zero_le_floor_iterate_zero (n : ℕ) : ↑n * ⌊f 0⌋ ≤ ⌊(f^[n] 0)⌋ :=
 begin
-  induction n with n ihn, { simp },
-  rw [pow_succ, mul_apply],
+  rw [le_floor, int.cast_mul, int.cast_coe_nat, ← zero_add ((n : ℝ) * _)],
+  apply le_iterate_of_add_int_le_map,
+  simp [floor_le]
 end
 
 /-!
@@ -236,7 +345,27 @@ noncomputable theory
 
 def rotnum_aux_seq (n : ℕ) : ℝ := (f^(2^n)) 0 / 2^n
 
+def translation_number : ℝ :=
+lim ((at_top : filter ℕ).map f.rotnum_aux_seq)
+
 lemma rotnum_aux_seq_def : f.rotnum_aux_seq = λ n : ℕ, (f^(2^n)) 0 / 2^n := rfl
+
+lemma translation_number_eq_of_tendsto_aux {τ : ℝ}
+  (h : tendsto f.rotnum_aux_seq at_top (𝓝 τ)) :
+  translation_number f = τ :=
+lim_eq (map_ne_bot at_top_ne_bot) h
+
+lemma translation_number_eq_of_tendsto₀ {τ : ℝ}
+  (h : tendsto (λ n:ℕ, f^[n] 0 / n) at_top (𝓝 τ)) :
+  translation_number f = τ :=
+f.translation_number_eq_of_tendsto_aux $
+by simpa [(∘), rotnum_aux_seq_def, coe_pow]
+using h.comp (nat.tendsto_pow_at_top_at_top_of_one_lt one_lt_two)
+
+lemma translation_number_eq_of_tendsto₀' {τ : ℝ}
+  (h : tendsto (λ n:ℕ, f^[n + 1] 0 / (n + 1)) at_top (𝓝 τ)) :
+  translation_number f = τ :=
+f.translation_number_eq_of_tendsto₀ $ (tendsto_add_at_top_iff_nat 1).1 h
 
 lemma rotnum_aux_seq_zero : f.rotnum_aux_seq 0 = f 0 := by simp [rotnum_aux_seq]
 
@@ -246,14 +375,11 @@ begin
   have : 0 < (2^(n+1):ℝ) := pow_pos zero_lt_two _,
   rw [div_div_eq_div_mul, ← pow_succ, ← abs_of_pos this],
   replace := abs_pos_iff.2 (ne_of_gt this),
-  convert (div_lt_div_right this).2 (f^(2^n)).dist_sqr_map_zero_lt,
+  convert (div_lt_div_right this).2 ((f^(2^n)).dist_map_map_zero_lt (f^(2^n))),
   simp_rw [rotnum_aux_seq, real.dist_eq],
-  rw [← abs_div, sub_div, ← pow_mul, ← nat.pow_succ, pow_succ,
-    mul_div_mul_left _ _ (@two_ne_zero ℝ _)]
+  rw [← abs_div, sub_div, pow_succ, ← two_mul, mul_div_mul_left _ _ (@two_ne_zero ℝ _),
+    nat.pow_succ, pow_mul, pow_two, mul_apply]
 end
-
-def translation_number : ℝ :=
-lim ((at_top : filter ℕ).map f.rotnum_aux_seq)
 
 lemma tendsto_translation_number_aux :
   tendsto f.rotnum_aux_seq at_top (𝓝 f.translation_number) :=
@@ -276,25 +402,29 @@ begin
     convert (div_le_div_right this).2 (H (2^n)),
     rw [rotnum_aux_seq, real.dist_eq, ← sub_div, abs_div, abs_of_pos this, real.dist_eq] },
   { exact mul_zero C ▸ tendsto_const_nhds.mul (tendsto_inv_at_top_zero.comp $
-      tendsto_pow_at_top_at_top_of_gt_1 one_lt_two) }
+      tendsto_pow_at_top_at_top_of_one_lt one_lt_two) }
 end
 
 lemma translation_number_eq_of_dist_bounded {f g : circle_deg1_lift} (C : ℝ)
   (H : ∀ n : ℕ, dist ((f^n) 0) ((g^n) 0) ≤ C) :
   f.translation_number = g.translation_number :=
-eq.symm $ tendsto_nhds_unique at_top_ne_bot g.tendsto_translation_number_aux $
+eq.symm $ g.translation_number_eq_of_tendsto_aux $
   f.tendsto_translation_number_of_dist_bounded_aux _ C H
 
 @[simp] lemma translation_number_map_id : translation_number 1 = 0 :=
-tendsto_nhds_unique at_top_ne_bot (tendsto_translation_number_aux 1) $
-  by simp [rotnum_aux_seq_def, tendsto_const_nhds]
+translation_number_eq_of_tendsto₀ _ $ by simp [tendsto_const_nhds]
 
-lemma translation_number_eq_of_semiconj {f g₁ g₂ : circle_deg1_lift} (H : semiconj_by f g₁ g₂) :
+lemma translation_number_eq_of_semiconj_by {f g₁ g₂ : circle_deg1_lift} (H : semiconj_by f g₁ g₂) :
   g₁.translation_number = g₂.translation_number :=
 translation_number_eq_of_dist_bounded 2 $ λ n, le_of_lt $
-  dist_map_zero_lt_of_semiconj $ H.pow_right n
+  dist_map_zero_lt_of_semiconj_by $ H.pow_right n
 
-lemma translation_number_map_mul_of_commute {f g : circle_deg1_lift} (h : commute f g) :
+lemma translation_number_eq_of_semiconj {f g₁ g₂ : circle_deg1_lift}
+  (H : function.semiconj f g₁ g₂) :
+  g₁.translation_number = g₂.translation_number :=
+translation_number_eq_of_semiconj_by $ semiconj_by_iff_semiconj.2 H
+
+lemma translation_number_mul_of_commute {f g : circle_deg1_lift} (h : commute f g) :
   (f * g).translation_number = f.translation_number + g.translation_number :=
 begin
   have : tendsto (λ n : ℕ, ((λ k, (f^k) 0 + (g^k) 0) (2^n)) / (2^n)) at_top
@@ -305,18 +435,18 @@ begin
     ((f * g).tendsto_translation_number_of_dist_bounded_aux _ 1 (λ n, _))
     this,
   rw [h.mul_pow, dist_comm],
-  exact le_of_lt ((f^n).dist_mul_map_zero_lt (g^n))
+  exact le_of_lt ((f^n).dist_map_map_zero_lt (g^n))
 end
 
 @[simp] lemma translation_number_pow :
   ∀ n : ℕ, (f^n).translation_number = n * f.translation_number
 | 0 := by simp
-| (n+1) := by rw [pow_succ', translation_number_map_mul_of_commute (commute.pow_self f n),
+| (n+1) := by rw [pow_succ', translation_number_mul_of_commute (commute.pow_self f n),
   translation_number_pow n, nat.cast_add_one, add_mul, one_mul]
 
 lemma translation_number_conj_eq (f : units circle_deg1_lift) (g : circle_deg1_lift) :
   (↑f * g * ↑(f⁻¹)).translation_number = g.translation_number :=
-(translation_number_eq_of_semiconj (semiconj_by.units_conj_mk _ _)).symm
+(translation_number_eq_of_semiconj_by (semiconj_by.units_conj_mk _ _)).symm
 
 lemma translation_number_conj_eq' (f : units circle_deg1_lift) (g : circle_deg1_lift) :
   (↑(f⁻¹) * g * f).translation_number = g.translation_number :=
@@ -342,12 +472,14 @@ lemma tendsto_translation_number₀ :
   tendsto (λ n:ℕ, ((f^n) 0) / n) at_top (𝓝 f.translation_number) :=
 (tendsto_add_at_top_iff_nat 1).1 f.tendsto_translation_number₀'
 
+/-- For any `x : ℝ` the sequence $\frac{f^n(x)-x}{n}$ tends to the translation number of `f`.
+In particular, this limit does not depend on `x`. -/
 lemma tendsto_translation_number (x : ℝ) :
   tendsto (λ n:ℕ, ((f^n) x - x) / n) at_top (𝓝 f.translation_number) :=
 begin
   rw [← translation_number_conj_eq' (translate $ multiplicative.of_add x)],
   convert tendsto_translation_number₀ _,
-  ext1 n,
+  ext n,
   simp [sub_eq_neg_add]
 end
 
@@ -355,158 +487,126 @@ lemma tendsto_translation_number' (x : ℝ) :
   tendsto (λ n:ℕ, ((f^(n+1)) x - x) / (n+1)) at_top (𝓝 f.translation_number) :=
 (tendsto_add_at_top_iff_nat 1).2 (f.tendsto_translation_number x)
 
-lemma translation_number_of_map_eq_add_int {x : ℝ} {m : ℤ}
-  (h : f x = x + m) :
-  f.translation_number = m :=
-begin
-  apply tendsto_nhds_unique at_top_ne_bot (f.tendsto_translation_number' x),
-  simp [f.map_pow_eq_of_map_eq_add_int h, mul_div_cancel_left, tendsto_const_nhds,
-    nat.cast_add_one_ne_zero]
-end
+lemma translation_number_mono : monotone translation_number :=
+λ f g h, le_of_tendsto_of_tendsto' at_top_ne_bot f.tendsto_translation_number₀
+  g.tendsto_translation_number₀ $ λ n, div_le_div_of_le_of_nonneg (pow_mono h n 0) n.cast_nonneg
 
+lemma translation_number_translate (x : ℝ) :
+  translation_number (translate $ multiplicative.of_add x) = x :=
+translation_number_eq_of_tendsto₀' _ $
+  by simp [nat.cast_add_one_ne_zero, mul_div_cancel_left, tendsto_const_nhds]
+
+lemma translation_number_le_of_le_add {z : ℝ} (hz : ∀ x, f x ≤ x + z) :
+  translation_number f ≤ z :=
+translation_number_translate z ▸ translation_number_mono
+  (λ x, trans_rel_left _ (hz x) (add_comm _ _))
+
+lemma le_translation_number_of_add_le {z : ℝ} (hz : ∀ x, x + z ≤ f x) :
+  z ≤ translation_number f :=
+translation_number_translate z ▸ translation_number_mono
+  (λ x, trans_rel_right _ (add_comm _ _) (hz x))
+
+lemma translation_number_le_of_le_add_int {x : ℝ} {m : ℤ} (h : f x ≤ x + m) :
+  translation_number f ≤ m :=
+le_of_tendsto' at_top_ne_bot (f.tendsto_translation_number' x) $ λ n,
+div_le_of_le_mul n.cast_add_one_pos $ sub_le_iff_le_add'.2 $
+(coe_pow f (n + 1)).symm ▸ f.iterate_le_of_map_le_add_int h (n + 1)
+
+lemma translation_number_le_of_le_add_nat {x : ℝ} {m : ℕ} (h : f x ≤ x + m) :
+  translation_number f ≤ m :=
+@translation_number_le_of_le_add_int f x m h
+
+lemma le_translation_number_of_add_int_le {x : ℝ} {m : ℤ} (h : x + m ≤ f x) :
+  ↑m ≤ translation_number f :=
+ge_of_tendsto' at_top_ne_bot (f.tendsto_translation_number' x) $ λ n,
+le_div_of_mul_le n.cast_add_one_pos $ le_sub_iff_add_le'.2 $
+by simp only [coe_pow, mul_comm (m:ℝ), ← nat.cast_add_one, f.le_iterate_of_add_int_le_map h]
+
+lemma le_translation_number_of_add_nat_le {x : ℝ} {m : ℕ} (h : x + m ≤ f x) :
+  ↑m ≤ translation_number f :=
+@le_translation_number_of_add_int_le f x m h
+
+/-- If `f x - x` is an integer number `m` for some point `x`, then `translation_number f = m`.
+On the circle this means that a map with a fixed point has rotation number zero. -/
+lemma translation_number_of_eq_add_int {x : ℝ} {m : ℤ} (h : f x = x + m) :
+  f.translation_number = m :=
+le_antisymm (translation_number_le_of_le_add_int f $ le_of_eq h)
+  (le_translation_number_of_add_int_le f $ le_of_eq h.symm)
+
+lemma floor_sub_le_translation_number (x : ℝ) : ↑⌊f x - x⌋ ≤ translation_number f :=
+le_translation_number_of_add_int_le f $ le_sub_iff_add_le'.1 (floor_le $ f x - x)
+
+lemma translation_number_le_ceil_sub (x : ℝ) : translation_number f ≤ ⌈f x - x⌉ :=
+translation_number_le_of_le_add_int f $ sub_le_iff_le_add'.1 (le_ceil $ f x - x)
+
+lemma map_lt_of_translation_number_lt_int {n : ℤ} (h : translation_number f < n) (x : ℝ) :
+  f x < x + n :=
+not_le.1 $ mt f.le_translation_number_of_add_int_le $ not_le.2 h
+
+lemma map_lt_of_translation_number_lt_nat {n : ℕ} (h : translation_number f < n) (x : ℝ) :
+  f x < x + n :=
+@map_lt_of_translation_number_lt_int f n h x
+
+lemma lt_map_of_int_lt_translation_number {n : ℤ} (h : ↑n < translation_number f) (x : ℝ) :
+  x + n < f x :=
+not_le.1 $ mt f.translation_number_le_of_le_add_int $ not_le.2 h
+
+lemma lt_map_of_nat_lt_translation_number {n : ℕ} (h : ↑n < translation_number f) (x : ℝ) :
+  x + n < f x :=
+@lt_map_of_int_lt_translation_number f n h x
+
+/-- If `f^n x - x`, `n > 0`, is an integer number `m` for some point `x`, then
+`translation_number f = m / n`. On the circle this means that a map with a periodic orbit has
+a rational rotation number. -/
 lemma translation_number_of_map_pow_eq_add_int {x : ℝ} {n : ℕ} {m : ℤ}
   (h : (f^n) x = x + m) (hn : 0 < n) :
   f.translation_number = m / n :=
 begin
-  have := (f^n).translation_number_of_map_eq_add_int h,
+  have := (f^n).translation_number_of_eq_add_int h,
   rwa [translation_number_pow, mul_comm, ← eq_div_iff] at this,
   exact nat.cast_ne_zero.2 (ne_of_gt hn)
 end
-
-lemma le_floor_pow_map_zero (n : ℕ) : ↑n * ⌊f 0⌋ ≤ ⌊(f^n) 0⌋ :=
-begin
-  induction n with n ihn, { simp },
-  simp [pow_succ],
-end
-
-lemma map_pow_sub_le_mul_of_forall_map_sub_le {z : ℝ} (hz : ∀ x, f x - x ≤ z) (n : ℕ) (x : ℝ) :
-  (f^n) x - x ≤ n * z :=
-begin
-  induction n generalizing x with n ihn, { simp },
-end
--- | 0 x := by simp
--- | (n+1) x :=
-  -- calc (f^(n+1)) x - x = ((f^n) (f x) - f x) + (f x - x) : by simp [pow_succ', sub_add_sub_cancel]
-  -- ... ≤ n * z + z : add_le_add (map_pow_sub_le_mul_of_forall_map_sub_le n (f x)) (hz x)
-  -- ... = (n + 1) * z : by rw [add_mul, one_mul]
-
-lemma mul_le_map_pow_sub_of_forall_le_map_sub {z : ℝ}
-  (hz : ∀ x, z ≤ f x - x) : ∀ (n : ℕ) (x : ℝ), ↑n * z ≤ (f^n) x - x
-| 0 x := by { rw [pow_zero], simp }
-| (n+1) x :=
-  calc (↑n + 1) * z = n * z + z : by rw [add_mul, one_mul]
-  ... ≤ ((f^n) (f x) - f x) + (f x - x) :
-    add_le_add (mul_le_map_pow_sub_of_forall_le_map_sub n (f x)) (hz x)
-  ... = (f^(n+1)) x - x : by rw [sub_add_sub_cancel, pow_succ', mul_apply]
-
-lemma translation_number_le_of_forall_map_sub_le {z : ℝ}
-  (hz : ∀ x, f x -x ≤ z) :
-  f.translation_number ≤ z :=
-begin
-  refine (le_of_tendsto' at_top_ne_bot (f.tendsto_translation_number' 0) $ assume n, _),
-  rw [div_le_iff', ← nat.cast_add_one],
-  exacts [f.map_pow_sub_le_mul_of_forall_map_sub_le hz _ _, n.cast_add_one_pos]
-end
-
-lemma le_translation_number_of_forall_le_map_sub {z : ℝ}
-  (hz : ∀ x, z ≤ f x - x) :
-  z ≤ f.translation_number :=
-begin
-  refine (ge_of_tendsto' at_top_ne_bot (f.tendsto_translation_number' 0) $ assume n, _),
-  rw [le_div_iff', ← nat.cast_add_one],
-  exacts [f.mul_le_map_pow_sub_of_forall_le_map_sub hz _ _, n.cast_add_one_pos]
-end
-
-lemma translation_number_mem_Icc₀ :
-  f.translation_number ∈ set.Icc (⌊f 0⌋ : ℝ) (⌊f 0⌋ + 1) :=
-begin
-  have := le_trans (quasi_hom_aux.dist_approx_le f) norm_cbd_quasi_hom_aux_le,
-  rw [dist_comm, ← metric.mem_closed_ball, closed_ball_Icc] at this,
-  simpa [-one_div_eq_inv, add_halves, translation_number] using this
-end
-
-lemma translation_number_mem_Icc (x : ℝ) :
-  f.translation_number ∈ set.Icc (⌊f x - x⌋ : ℝ) (⌊f x - x⌋ + 1) :=
-begin
-  rw [← translation_number_conj_eq' (translate x), ← quasi_hom_eval_zero_conj_translate,
-    quasi_hom_eval_zero_apply],
-  apply translation_number_mem_Icc₀
-end
-
-lemma translation_number_mem_Icc_of_pow (n : ℕ) (hn : 0 < n) (x : ℝ) :
-  f.translation_number ∈ Icc ((⌊(f^n) x - x⌋ : ℝ) / n) ((⌊(f^n) x - x⌋ + 1) / n) :=
-begin
-  have : 0 < (n:ℝ), from nat.cast_pos.2 hn,
-  rw [mem_Icc, div_le_iff this, le_div_iff this, mul_comm, ← translation_number_pow, ← mem_Icc],
-  exact translation_number_mem_Icc (f^n) x
-end
-
-lemma translation_number_mem_Icc_of_pow₀ (n : ℕ) (hn : 0 < n) :
-  f.translation_number ∈ Icc ((⌊(f^n) 0⌋ : ℝ) / n) ((⌊(f^n) 0⌋ + 1) / n) :=
-by simpa using f.translation_number_mem_Icc_of_pow n hn 0
-
-lemma map_sub_lt_of_translation_number_lt {m : ℤ}
-  (h : f.translation_number < m) (x : ℝ) : f x - x < m :=
-floor_lt.1 (int.cast_lt.1 $ lt_of_le_of_lt (f.translation_number_mem_Icc x).1 h)
-
-lemma lt_map_sub_of_lt_translation_number {m : ℤ}
-  (h : ↑m < f.translation_number) (x : ℝ) : ↑m < f x - x :=
-begin
-  have := lt_of_lt_of_le h (f.translation_number_mem_Icc x).2,
-  norm_cast at this,
-  refine lt_of_le_of_ne (le_floor.1 $ int.le_of_lt_add_one this) (λ H, _),
-  replace H : f x = x + m, by rwa [← sub_eq_iff_eq_add', eq_comm],
-  replace H := f.translation_number_of_map_eq_add_int H,
-  exact ne_of_gt h H
-end
-
-lemma map_mem_Ioo_of_translation_number {m : ℤ}
-  (h : f.translation_number ∈ Ioo (m:ℝ) (m + 1)) (x) :
-  f x - x ∈ Ioo (m:ℝ) (m + 1) :=
-⟨f.lt_map_sub_of_lt_translation_number h.1 x,
-  by { cases h, norm_cast at *, apply f.map_sub_lt_of_translation_number_lt, assumption } ⟩
-
-lemma map_fract_sub_fract_eq (x : ℝ) :
-  f (fract x) - fract x = f x - x:=
-by conv_rhs { rw [← fract_add_floor x, f.map_add_int, add_sub_comm, sub_self, add_zero] }
 
 lemma forall_map_sub_of_Icc (P : ℝ → Prop)
   (h : ∀ x ∈ Icc (0:ℝ) 1, P (f x - x)) (x : ℝ) : P (f x - x) :=
 f.map_fract_sub_fract_eq x ▸ h _ ⟨fract_nonneg _, le_of_lt (fract_lt_one _)⟩
 
-lemma translation_number_lt_of_forall_map_sub_lt (hf : continuous f) {z : ℝ}
-  (hz : ∀ x, f x - x < z) : f.translation_number < z :=
+lemma translation_number_lt_of_forall_lt_add (hf : continuous f) {z : ℝ}
+  (hz : ∀ x, f x < x + z) : f.translation_number < z :=
 begin
   obtain ⟨x, xmem, hx⟩ : ∃ x ∈ Icc (0:ℝ) 1, ∀ y ∈ Icc (0:ℝ) 1, f y - y ≤ f x - x,
     from compact_Icc.exists_forall_ge (nonempty_Icc.2 zero_le_one)
       (hf.sub continuous_id).continuous_on,
-  replace hx := f.forall_map_sub_of_Icc (λ a, a ≤ f x - x) hx,
-  replace hx := f.translation_number_le_of_forall_map_sub_le hx,
-  exact lt_of_le_of_lt hx (hz x)
+  refine lt_of_le_of_lt _ (sub_lt_iff_lt_add'.2 $ hz x),
+  apply translation_number_le_of_le_add,
+  simp only [← sub_le_iff_le_add'],
+  exact f.forall_map_sub_of_Icc (λ a, a ≤ f x - x) hx
 end
 
-lemma lt_translation_number_of_forall_lt_map_sub (hf : continuous f) {z : ℝ}
-  (hz : ∀ x, z < f x - x) : z < f.translation_number :=
+lemma lt_translation_number_of_forall_add_lt (hf : continuous f) {z : ℝ}
+  (hz : ∀ x, x + z < f x) : z < f.translation_number :=
 begin
   obtain ⟨x, xmem, hx⟩ : ∃ x ∈ Icc (0:ℝ) 1, ∀ y ∈ Icc (0:ℝ) 1, f x - x ≤ f y - y,
     from compact_Icc.exists_forall_le (nonempty_Icc.2 zero_le_one)
       (hf.sub continuous_id).continuous_on,
-  replace hx := f.forall_map_sub_of_Icc _ hx,
-  replace hx := f.le_translation_number_of_forall_le_map_sub hx,
-  exact lt_of_lt_of_le (hz x) hx,
+  refine lt_of_lt_of_le (lt_sub_iff_add_lt'.2 $ hz x) _,
+  apply le_translation_number_of_add_le,
+  simp only [← le_sub_iff_add_le'],
+  exact f.forall_map_sub_of_Icc _ hx
 end
 
-lemma exists_sub_eq_translation_number (hf : continuous f) :
-  ∃ x, f x - x = f.translation_number :=
+lemma exists_eq_add_translation_number (hf : continuous f) :
+  ∃ x, f x = x + f.translation_number :=
 begin
-  obtain ⟨a, ha⟩ : ∃ x, f x - x ≤ f.translation_number,
+  obtain ⟨a, ha⟩ : ∃ x, f x ≤ x + f.translation_number,
   { by_contradiction H,
     push_neg at H,
-    exact lt_irrefl _ (f.lt_translation_number_of_forall_lt_map_sub hf H) },
-  obtain ⟨b, hb⟩ : ∃ x, f.translation_number ≤ f x - x,
+    exact lt_irrefl _ (f.lt_translation_number_of_forall_add_lt hf H) },
+  obtain ⟨b, hb⟩ : ∃ x, x + f.translation_number ≤ f x,
   { by_contradiction H,
     push_neg at H,
-    exact lt_irrefl _ (f.translation_number_lt_of_forall_map_sub_lt hf H) },
+    exact lt_irrefl _ (f.translation_number_lt_of_forall_lt_add hf H) },
+  simp only [← sub_eq_iff_eq_add'],
   exact intermediate_value_univ a b (hf.sub continuous_id) ⟨ha, hb⟩
 end
 

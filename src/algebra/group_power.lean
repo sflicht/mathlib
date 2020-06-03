@@ -95,6 +95,17 @@ by induction n with n ih; [rw [add_zero, pow_zero, mul_one],
 theorem add_nsmul : ∀ (a : A) (m n : ℕ), (m + n) •ℕ a = m •ℕ a + n •ℕ a :=
 @pow_add (multiplicative A) _
 
+/-- Additive homomorphisms from `ℕ` are defined by the image of `1`. -/
+def multiples_hom [add_monoid A] : A ≃ (ℕ →+ A) :=
+{ to_fun := λ x, ⟨λ n, n •ℕ x, zero_nsmul x, λ m n, add_nsmul _ _ _⟩,
+  inv_fun := λ f, f 1,
+  left_inv := one_nsmul,
+  right_inv := λ f, add_monoid_hom.nat_ext $ one_nsmul _ }
+
+@[simp] lemma multiples_hom_apply [add_monoid A] (x : A) (n : ℕ) : multiples_hom x n = n •ℕ x := rfl
+@[simp] lemma multiples_hom_symm_apply [add_monoid A] (f : ℕ →+ A) :
+  multiples_hom.symm f = f 1 := rfl
+
 @[simp] theorem one_pow (n : ℕ) : (1 : M)^n = 1 :=
 by induction n with n ih; [refl, rw [pow_succ, ih, one_mul]]
 @[simp] theorem nsmul_zero (n : ℕ) : n •ℕ (0 : A) = 0 :=
@@ -111,9 +122,14 @@ theorem mul_nsmul (a : A) (m n : ℕ) : m * n •ℕ a = m •ℕ (n •ℕ a) :
 @pow_mul' (multiplicative A) _ a m n
 
 @[simp] theorem nsmul_one [has_one A] : ∀ n : ℕ, n •ℕ (1 : A) = n :=
-add_monoid_hom.eq_nat_cast
-  ⟨λ n, n •ℕ (1 : A), zero_nsmul _, λ _ _, add_nsmul _ _ _⟩
-  (one_nsmul _)
+add_monoid_hom.eq_nat_cast (multiples_hom 1) (one_nsmul _)
+
+theorem nsmul_eq_mul [semiring R] (n : ℕ) (a : R) : n •ℕ a = n * a :=
+have multiples_hom a = (add_monoid_hom.mul_right a).comp (nat.cast_add_monoid_hom R), by ext; simp,
+add_monoid_hom.ext_iff.1 this n
+
+theorem nsmul_eq_mul' [semiring R] (a : R) (n : ℕ) : n •ℕ a = a * n :=
+(nsmul_eq_mul n a).trans $ (nat.mul_cast_comm _ _).symm
 
 theorem pow_bit0 (a : M) (n : ℕ) : a ^ bit0 n = a^n * a^n := pow_add _ _ _
 theorem bit0_nsmul (a : A) (n : ℕ) : bit0 n •ℕ a = n •ℕ a + n •ℕ a := add_nsmul _ _ _
@@ -160,8 +176,7 @@ end monoid
 by induction q with q ih; [refl, rw [nat.pow_succ, pow_succ, mul_comm, ih]]
 
 @[simp] theorem nat.nsmul_eq_mul (m n : ℕ) : m •ℕ n = m * n :=
-by induction m with m ih; [rw [zero_nsmul, zero_mul],
-  rw [succ_nsmul', ih, nat.succ_mul]]
+by simpa only [nat.cast_id] using nsmul_eq_mul m n
 
 /-!
 ### Commutative (additive) monoid
@@ -371,13 +386,6 @@ end comm_group
 @[simp] lemma with_bot.coe_nsmul [add_monoid A] (a : A) (n : ℕ) :
   ((nsmul n a : A) : with_bot A) = nsmul n a :=
 add_monoid_hom.map_nsmul ⟨_, with_bot.coe_zero, with_bot.coe_add⟩ a n
-
-theorem nsmul_eq_mul' [semiring R] (a : R) (n : ℕ) : n •ℕ a = a * n :=
-by induction n with n ih; [rw [zero_nsmul, nat.cast_zero, mul_zero],
-  rw [succ_nsmul', ih, nat.cast_succ, mul_add, mul_one]]
-
-theorem nsmul_eq_mul [semiring R] (n : ℕ) (a : R) : n •ℕ a = n * a :=
-by rw [nsmul_eq_mul', nat.mul_cast_comm]
 
 theorem mul_nsmul_left [semiring R] (a b : R) (n : ℕ) : n •ℕ (a * b) = a * (n •ℕ b) :=
 by rw [nsmul_eq_mul', nsmul_eq_mul', mul_assoc]
@@ -695,13 +703,6 @@ def gpowers_hom [group G] : G ≃ (multiplicative ℤ →* G) :=
   inv_fun := λ f, f (multiplicative.of_add 1),
   left_inv := gpow_one,
   right_inv := λ f, monoid_hom.ext $ λ n, by { simp [← f.map_gpow, ← of_add_gsmul ] } }
-
-/-- Additive homomorphisms from `ℕ` are defined by the image of `1`. -/
-def multiples_hom [add_monoid A] : A ≃ (ℕ →+ A) :=
-{ to_fun := λ x, ⟨λ n, n •ℕ x, zero_nsmul x, λ m n, add_nsmul _ _ _⟩,
-  inv_fun := λ f, f 1,
-  left_inv := one_nsmul,
-  right_inv := λ f, add_monoid_hom.ext $ λ n, by simp [← f.map_nsmul] }
 
 /-- Additive homomorphisms from `ℤ` are defined by the image of `1`. -/
 def gmultiples_hom [add_group A] : A ≃ (ℤ →+ A) :=

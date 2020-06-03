@@ -1179,7 +1179,7 @@ lemma smul_mem (S : add_submonoid A) {x : A} (hx : x ∈ S) :
 | 0     := S.zero_mem
 | (n+1) := S.add_mem hx (smul_mem n)
 
-lemma closure_singleton_eq (x : A) : closure ({x} : set A) = (multiples_hom A x).mrange :=
+lemma closure_singleton_eq (x : A) : closure ({x} : set A) = (multiples_hom x).mrange :=
 closure_eq_of_le (set.singleton_subset_iff.2 ⟨1, trivial, one_nsmul x⟩) $
   λ x ⟨n, _, hn⟩, hn ▸ smul_mem _ (subset_closure $ set.mem_singleton _) _
 
