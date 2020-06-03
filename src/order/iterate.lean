@@ -16,7 +16,7 @@ two self-maps that commute with each other.
 Current selection of inequalities is motivated by formalization of the rotation number of
 a circle homeomorphism.
 -/
-variables {α : Type*} {β : Type*}
+variables {α : Type*}
 
 namespace function
 
