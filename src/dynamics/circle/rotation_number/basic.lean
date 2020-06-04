@@ -1,12 +1,9 @@
-import tactic.monotonicity
-import tactic.find
-import tactic.fin_cases
 import analysis.specific_limits
 import dynamics.fixed_points
 import order.iterate
 import algebra.iterate_hom
 
-open category_theory (End) filter set
+open filter set
 open_locale topological_space classical
 
 -- TODO: move to a new `algebra.conj`
@@ -595,8 +592,10 @@ begin
   exact f.forall_map_sub_of_Icc _ hx
 end
 
+/-- If `f` is a continuous monotone map `ℝ → ℝ`, `f (x + 1) = f x + 1`, then there exists `x`
+such that `f x = x + translation_number f`. -/
 lemma exists_eq_add_translation_number (hf : continuous f) :
-  ∃ x, f x = x + f.translation_number :=
+  ∃ x, f x = x + translation_number f :=
 begin
   obtain ⟨a, ha⟩ : ∃ x, f x ≤ x + f.translation_number,
   { by_contradiction H,
@@ -606,16 +605,15 @@ begin
   { by_contradiction H,
     push_neg at H,
     exact lt_irrefl _ (f.translation_number_lt_of_forall_lt_add hf H) },
-  simp only [← sub_eq_iff_eq_add'],
-  exact intermediate_value_univ a b (hf.sub continuous_id) ⟨ha, hb⟩
+  exact intermediate_value_univ₂ hf (continuous_id.add continuous_const) ha hb
 end
 
 lemma translation_number_eq_int_iff (hf : continuous f) {m : ℤ} :
-  f.translation_number = m ↔ ∃ x, f x - x = m :=
+  f.translation_number = m ↔ ∃ x, f x = x + m :=
 begin
-  refine ⟨λ h, h ▸ f.exists_sub_eq_translation_number hf, _⟩,
+  refine ⟨λ h, h ▸ f.exists_eq_add_translation_number hf, _⟩,
   rintros ⟨x, hx⟩,
-  exact f.translation_number_of_map_eq_add_int (sub_eq_iff_eq_add'.1 hx)
+  exact f.translation_number_of_eq_add_int hx
 end
 
 lemma continuous_pow (hf : continuous f) (n : ℕ) :
@@ -624,30 +622,10 @@ by { rw coe_pow, exact hf.iterate n }
 
 lemma translation_number_eq_rat_iff (hf : continuous f) {m : ℤ}
   {n : ℕ} (hn : 0 < n) :
-  f.translation_number = m / n ↔ ∃ x, (f^n) x - x = m :=
+  f.translation_number = m / n ↔ ∃ x, (f^n) x = x + m :=
 begin
   rw [eq_div_iff, mul_comm, ← translation_number_pow]; [skip, exact ne_of_gt (nat.cast_pos.2 hn)],
   exact (f^n).translation_number_eq_int_iff (f.continuous_pow hf n)
-end
-
-end circle_deg1_lift
-
-namespace circle_deg1_lift
-
-variables {G : Type*} [group G] (f g : G →* circle_deg1_lift)
-  (H : ∀ x, (f x).translation_number = (g x).translation_number)
-
-def semiconj_translation : circle_deg1_lift :=
-begin
-  use λ x, Sup ((λ N : ℕ × ℕ, ↑N.1 * f.translation_number - N.2) '' {N | (f^N.1) 0 - N.2 ≤ x}),
-  
-end
-
-def semiconj_translation_of_irrational (f : circle_deg1_lift) (hf : continuous f)
-  (hrot : irrational f.translation_number) :
-  { g : circle_deg1_lift // semiconj_by g f (translate f.translation_number) } :=
-begin
-  refine ⟨⟨λ x, ⨆ n:ℕ, (f^n)
 end
 
 end circle_deg1_lift
