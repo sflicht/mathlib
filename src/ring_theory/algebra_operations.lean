@@ -126,7 +126,7 @@ begin
   exact mul_mem_mul hi hj
 end
 
-lemma map_mul {A'} [ring A'] [algebra R A'] {f : A →ₐ[R] A'} :
+lemma map_mul {A'} [ring A'] [algebra R A'] (f : A →ₐ[R] A') :
   map f.to_linear_map (M * N) = map f.to_linear_map M * map f.to_linear_map N :=
 calc map f.to_linear_map (M * N)
     = ⨆ (i : M), (N.map (lmul R A i)).map f.to_linear_map : map_supr _ _

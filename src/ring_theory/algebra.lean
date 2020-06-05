@@ -399,6 +399,9 @@ instance : inhabited (A₁ ≃ₐ[R] A₁) := ⟨1⟩
 @[refl]
 def refl : A₁ ≃ₐ[R] A₁ := 1
 
+@[simp] lemma coe_refl : (@refl R A₁ _ _ _ : A₁ →ₐ[R] A₁) = alg_hom.id R A₁ :=
+alg_hom.ext (λ x, rfl)
+
 /-- Algebra equivalences are symmetric. -/
 @[symm]
 def symm (e : A₁ ≃ₐ[R] A₂) : A₂ ≃ₐ[R] A₁ :=
