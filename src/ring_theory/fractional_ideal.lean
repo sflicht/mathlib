@@ -161,6 +161,38 @@ mem_one_iff.mpr ⟨1, f.to_map.map_one⟩
 
 @[simp] lemma val_one : (1 : fractional_ideal f).1 = (1 : ideal R) := rfl
 
+variables {P' : Type*} [comm_ring P'] {f' : localization S P'}
+variables {P'' : Type*} [comm_ring P''] {f'' : localization S P''}
+
+lemma fractional_map (g : f.codomain →ₐ[R] f'.codomain) (I : fractional_ideal f) :
+  is_fractional f' (submodule.map g.to_linear_map I.1) :=
+begin
+  rcases I with ⟨I, a, a_nonzero, hI⟩,
+  use [a, a_nonzero],
+  intros b hb,
+  obtain ⟨b', b'_mem, hb'⟩ := submodule.mem_map.mp hb,
+  obtain ⟨x, hx⟩ := hI b' b'_mem,
+  use x,
+  erw [←g.commutes, hx, g.map_smul, hb'],
+  refl
+end
+
+/-- `I.map f` is the pushforward of the fractional ideal `I` along the algebra morphism `f` -/
+def map (g : f.codomain →ₐ[R] f'.codomain) (I : fractional_ideal f) :
+  fractional_ideal f' :=
+⟨submodule.map g.to_linear_map I.1, fractional_map g I⟩
+
+@[simp] lemma val_map (g : f.codomain →ₐ[R] f'.codomain) (I : fractional_ideal f) :
+  (map g I).val = submodule.map g.to_linear_map I.val := rfl
+
+@[simp] lemma map_id (I : fractional_ideal f) : I.map (alg_hom.id _ _) = I :=
+ext (submodule.map_id I.1)
+
+@[simp] lemma map_comp
+  (g : f.codomain →ₐ[R] f'.codomain) (g' : f'.codomain →ₐ[R] f''.codomain)
+  (I : fractional_ideal f) : I.map (g'.comp g) = (I.map g).map g' :=
+ext (submodule.map_comp g.to_linear_map g'.to_linear_map I.1)
+
 section lattice
 
 /-!
@@ -335,6 +367,10 @@ instance comm_semiring : comm_semiring (fractional_ideal f) :=
   right_distrib := λ I J K, ext (add_mul _ _ _),
   ..fractional_ideal.add_comm_monoid,
   ..fractional_ideal.comm_monoid }
+
+@[simp] lemma map_mul (I J : fractional_ideal f) (g : f.codomain →ₐ[R] f'.codomain) :
+  (I * J).map g = I.map g * J.map g :=
+ext (submodule.map_mul _ _)
 
 end semiring
 
