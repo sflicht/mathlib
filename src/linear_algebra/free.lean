@@ -7,7 +7,19 @@ import linear_algebra.basic
        ring_theory.noetherian
        data.finsupp
        tactic
+/-!
+# free modules over a commutative ring `R`
 
+## Notations
+
+This file introduces the notation `R^⊕ι` for `ι →₀ R`.
+
+FIXME: it also will introduce the notation `M^⊕ι` for `M ⊗ R^⊕ι`
+
+## Tags
+
+free, locally free, projective
+-/
 noncomputable theory
 open_locale classical
 universes u v w
@@ -16,7 +28,9 @@ variables (ι : Type*)
 
 namespace module
 
+/-- The free module on a set `ι`. -/
 def free := ι →₀ R
+
 instance : has_coe_to_fun (free R ι) := finsupp.has_coe_to_fun
 
 -- FIXME: this belongs elsewhere (where?)
@@ -45,6 +59,7 @@ end free
 
 namespace module
 
+/-- Predicate asserting that a module is free.-/
 def is_free (M : Type*) [add_comm_group M] [module R M] := ∃ (ι : Type*), nonempty ((R^⊕ι) ≃ₗ[R] M)
 
 end module
@@ -79,13 +94,7 @@ variables {n : ℕ}
 example (x y : @of_rank R _ n) : of_rank n := x + y
 example (x : @of_rank R _ n) (r : R) : @of_rank R _ n := r • x
 
-/- 
-notation R ` ^⊔ `:40 n:66 := of_rank n 
-variables {R n}
-instance of_rank.add_comm_group : add_comm_group (R ^⊔ n) := 
-
-example (x y : R ^⊔ (1:ℕ)) : R ^⊔ 1 := x + y
- -/
+-- FIXME should we have notation that allows writing Rⁿ for R^⊕(fin n)?
 
 @[simp] lemma equiv_of_rank_card [fintype ι]: R^⊕ι ≃ₗ[R] (@of_rank R _ (fintype.card ι)) :=
 free.equiv_of_bijection _ _ $ trunc.out $ fintype.equiv_fin ι 
@@ -101,6 +110,8 @@ variables (R)
   left_inv := by tidy,
   right_inv := by tidy}
 
+-- FIXME should the following def's actually be lemmas?
+/-- A canonical (usually nonzero) element of the free `R`-module of rank 1. -/
 def one.unit : one R := finsupp.single unit.star (1:R)
 
 @[simp] def one_equiv.to_fun  : one R → R := λ f, f unit.star
@@ -120,9 +131,11 @@ def corepr_id.inv_fun
     (M : Type*) [add_comm_group M] [module R M] 
     (T : module.Hom R (one R) M) : M := T (one.unit R)
 
--- natural transformation from the identity functor on Module R
--- to the functor (internally) co-represented by one R
--- This is part of the monoidal structure on Module R
+/--
+natural transformation from the identity functor on Module R
+to the functor (internally) co-represented by one R.
+This is part of the monoidal structure on Module R 
+-/
 def corepr_id (M : Type*) [add_comm_group M] [module R M] : M ≃ₗ[R] module.Hom R (one R) M := { to_fun := corepr_id.to_fun R M,
   add := begin intros x y, repeat {rw corepr_id.to_fun}, suffices : ∀ (f : R^⊕unit), 
     f () • (x + y) = f() • x + f() • y, finish, intro f, rw smul_add end,
